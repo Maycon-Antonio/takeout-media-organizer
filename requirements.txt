@@ -1,0 +1,5 @@
+# Dependências Python
+# (nenhuma)
+
+# Dependências do sistema:
+# - ExifTool (https://exiftool.org)
