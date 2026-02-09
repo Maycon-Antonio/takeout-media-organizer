@@ -6,10 +6,9 @@ import csv
 from datetime import datetime, timezone
 
 # ================= CONFIGURAÇÕES =================
-PASTA_ORIGEM  = os.path.join(os.path.dirname(__file__), "data", "media_raw")
-PASTA_DESTINO = os.path.join(os.path.dirname(__file__), "data", "media_organized")
-RELATORIO_CSV = os.path.join(os.path.dirname(__file__), "reports", "processing_report.csv")
-EXIFTOOL_PATH = os.path.join(os.path.dirname(__file__), "exiftool", "exiftool.exe")
+PASTA_ORIGEM  = r"C:\Users\mayco\Downloads\MidiaBruta_GoogleFotos_Takeout"
+PASTA_DESTINO = r"C:\Users\mayco\Downloads\Organizado_GoogleFotos_Takeout"
+RELATORIO_CSV = r"C:\Users\mayco\Downloads\Relatorio_GoogleFotos_Takeout.csv"
 
 EXT_FOTOS  = [".jpg", ".jpeg", ".png", ".webp", ".heic"]
 EXT_VIDEOS = [".mp4", ".mov", ".avi", ".mkv"]
@@ -23,7 +22,7 @@ MESES = {
 
 
 def run_exiftool(args):
-    cmd = [EXIFTOOL_PATH] + args
+    cmd = ["exiftool"] + args
     subprocess.run(
         cmd,
         stdout=subprocess.DEVNULL,
@@ -34,20 +33,16 @@ def run_exiftool(args):
 
 def encontrar_json(pasta, nome_arquivo):
     """
-    Encontra JSON do Google Takeout mesmo que o nome esteja truncado
-    Ex:
-    - .supplemental-metadata.json
-    - .supplemental-metadata-me
-    - .supplemental-metadata-ma
+    Encontra JSON do Google Takeout baseado no nome do arquivo.
+    Critério:
+    - Começa com o mesmo nome do arquivo
+    - Termina com .json
     """
     nome_base = nome_arquivo.lower()
 
     for f in os.listdir(pasta):
         f_lower = f.lower()
-        if (
-            f_lower.startswith(nome_base)
-            and "supplemental-metadata" in f_lower
-        ):
+        if f_lower.startswith(nome_base) and f_lower.endswith(".json"):
             return os.path.join(pasta, f)
 
     return None
