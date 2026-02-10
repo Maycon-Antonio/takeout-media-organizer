@@ -22,9 +22,8 @@ MESES = {
 
 
 def run_exiftool(args):
-    cmd = ["exiftool"] + args
     subprocess.run(
-        cmd,
+        ["exiftool"] + args,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         shell=False
@@ -33,12 +32,10 @@ def run_exiftool(args):
 
 def encontrar_json(pasta, nome_arquivo):
     """
-    Encontra JSON do Google Takeout baseado no nome do arquivo.
-    Critério:
-    - Começa com o mesmo nome do arquivo
-    - Termina com .json
+    Encontra o JSON correspondente ao arquivo de mídia
+    usando slice para contornar o limite de nome do Takeout.
     """
-    nome_base = nome_arquivo.lower()
+    nome_base = nome_arquivo.lower()[:40]
 
     for f in os.listdir(pasta):
         f_lower = f.lower()
@@ -48,55 +45,80 @@ def encontrar_json(pasta, nome_arquivo):
     return None
 
 
+def nome_unico(destino, nome_arquivo):
+    """
+    Garante que o nome do arquivo não sobrescreva outro existente.
+    """
+    base, ext = os.path.splitext(nome_arquivo)
+    contador = 1
+    novo_nome = nome_arquivo
+
+    while os.path.exists(os.path.join(destino, novo_nome)):
+        novo_nome = f"{base}_{contador}{ext}"
+        contador += 1
+
+    return novo_nome
+
+
 def processar():
+    arquivos_processados = set()  # evita duplicidade no relatório
+
     with open(RELATORIO_CSV, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow([
-            "Arquivo original",
-            "Arquivo final",
+            "Caminho original",
+            "Caminho final",
             "Tipo",
             "Data recuperada",
             "Ano",
-            "Mes",
+            "Mês",
             "Dia",
             "GPS recuperado",
             "Status"
         ])
 
-        for root, dirs, files in os.walk(PASTA_ORIGEM):
+        for root, _, files in os.walk(PASTA_ORIGEM):
             for file in files:
+                caminho_arquivo = os.path.join(root, file)
+
+                if caminho_arquivo in arquivos_processados:
+                    continue
+
                 nome, ext = os.path.splitext(file)
                 ext = ext.lower()
 
                 if ext not in EXT_FOTOS + EXT_VIDEOS:
                     continue
 
-                caminho_arquivo = os.path.join(root, file)
+                arquivos_processados.add(caminho_arquivo)
+
                 json_path = encontrar_json(root, file)
 
                 if not json_path:
                     writer.writerow([
-                        file, "", ext, "", "", "", "", "Não", "JSON não encontrado"
+                        caminho_arquivo, "", ext, "", "", "", "", "Não", "JSON não encontrado"
                     ])
                     continue
 
                 try:
                     with open(json_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                except:
+                except Exception:
                     writer.writerow([
-                        file, "", ext, "", "", "", "", "Não", "Erro ao ler JSON"
+                        caminho_arquivo, "", ext, "", "", "", "", "Não", "Erro ao ler JSON"
                     ])
                     continue
 
                 # ===== DATA REAL =====
+                ts = None
                 if "photoTakenTime" in data and "timestamp" in data["photoTakenTime"]:
                     ts = int(data["photoTakenTime"]["timestamp"])
                 elif "creationTime" in data and "timestamp" in data["creationTime"]:
                     ts = int(data["creationTime"]["timestamp"])
-                else:
+
+                if not ts:
                     writer.writerow([
-                        file, "", ext, "", "", "", "", "Não", "Sem data válida"
+                        caminho_arquivo, "", ext, "", "", "", "", "Não", "Sem data válida"
                     ])
                     continue
 
@@ -108,7 +130,12 @@ def processar():
                 mes_nome = MESES[mes]
 
                 # ===== NOME PELO TITLE =====
-                novo_nome = data.get("title", file)
+                novo_nome = data.get("title", file).strip()
+
+                # Remove caracteres inválidos no Windows
+                for c in r'<>:"/\|?*':
+                    novo_nome = novo_nome.replace(c, "_")
+
                 if not os.path.splitext(novo_nome)[1]:
                     novo_nome += ext
 
@@ -121,6 +148,7 @@ def processar():
                 )
                 os.makedirs(pasta_final, exist_ok=True)
 
+                novo_nome = nome_unico(pasta_final, novo_nome)
                 novo_caminho = os.path.join(pasta_final, novo_nome)
 
                 # ===== METADADOS =====
@@ -151,14 +179,14 @@ def processar():
                 # ===== MOVER ARQUIVO =====
                 shutil.move(caminho_arquivo, novo_caminho)
 
-                # ===== REMOVER JSON APÓS SUCESSO =====
+                # ===== REMOVER JSON =====
                 try:
                     os.remove(json_path)
-                except:
+                except Exception:
                     pass
 
                 writer.writerow([
-                    file,
+                    caminho_arquivo,
                     novo_caminho,
                     "Foto" if ext in EXT_FOTOS else "Vídeo",
                     dt.isoformat(),
